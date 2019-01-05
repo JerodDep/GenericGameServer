@@ -22,7 +22,10 @@ sock.send("test".encode())
 
 def Reciever(sock, e):
     while not e.isSet():
-        data = sock.recv(BUFFER_SIZE)
+        try:
+            data = sock.recv(BUFFER_SIZE)
+        except socket.error:
+            break;
         print ("System: ", data)
     return
 
@@ -41,8 +44,12 @@ t.start()
 
 while True:
     x = input("> ")
-    SendMessage(x)
+    
     if x == "exit()":
-        sock.close()
+        sock.send("exit()".encode())
         e.set()
+        sock.close()
         break
+    
+    SendMessage(x)
+    

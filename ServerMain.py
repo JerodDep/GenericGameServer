@@ -37,6 +37,7 @@ Adds new clients to the client list
 @param e Event to halt thread
 """
 def HandleConnection(sock, clients, preParsedList, recieverThreads, e):
+    
     while True:
         while not e.isSet():
             # Accept new connections
@@ -62,8 +63,9 @@ def HandleConnection(sock, clients, preParsedList, recieverThreads, e):
             
             # Add reciever to list
             recieverThreads.append(t)
-            #TODO: make a new queue when is is set and store input until it's not set again
-        time.sleep(.1)
+
+            #TODO: remove closed sockets
+
     return
 
     
@@ -78,15 +80,51 @@ Waits for new messages from client, then adds them to queue
 @param e Event to halt thread
 """
 def Reciever(sock, preParsedQueue, e):
-    while True:
+    holdQueue = queue.Queue()   # Queue used to hold messages while we are ticking
+    isConnected = True          # Used to only run this if the client is connected
+    while isConnected:
         while not e.isSet():
             data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
             
-            print ("Received message:", data.decode())
+            #Check for dropped connection
+            if data.decode() == "exit()":
+                print ("Client: ", sock.getpeername(), " has disconnected")
+                sock.close()
+                isConnected = False
+                break
             
+            # Display message
+            print ("Received message:", data.decode(), " | From: ", sock.getpeername())
+            
+            # Add message to queue
             preParsedQueue.put(data.decode())
+        
+        while e.isSet():
+            # While we are ticking, hold all input and add it 
+            # to the preParsedList when we are done
+            data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+            
+            #Check for dropped connection
+            if data.decode() == "exit()":
+                print ("Client: ", sock.getpeername(), " has disconnected")
+                sock.close()
+                isConnected = False
+                break
+            
+            # Display message
+            print ("Received message:", data.decode(), " | From: ", sock.getpeername())
+            
+            # Add message to queue
+            holdQueue.put(data.decode())
+        
+        # Add holdQueue to preParsedQueue
+        if holdQueue.qsize() > 0:
+            holdQueue.put(None)
+            for message in iter(holdQueue.get, None):
+                preParsedQueue.put(message)
+            with holdQueue.mutex:
+                holdQueue.queue.clear()
 
-        time.sleep(.1)
     return
 
 
@@ -109,7 +147,12 @@ def Tick(clients, commands, e):
         commandQueue.put(None)
         for command in iter(commandQueue.get, None):
             for client in clients:
-                client.send(command.encode())
+                try:
+                    client.send(command.encode())
+                except socket.error:
+                    pass
+                    
+                
         # Clear queue
         with commandQueue.mutex:
             commandQueue.queue.clear()
