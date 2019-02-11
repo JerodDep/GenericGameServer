@@ -111,6 +111,8 @@ def Reciever(sock, preParsedQueue, e):
                 isConnected = False
                 break
             
+            #TODO: Handle forced disconnects
+            
             # Display message
             print ("Received message:", data.decode(), " | From: ", sock.getpeername())
             
